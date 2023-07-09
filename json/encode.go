@@ -54,7 +54,7 @@ import (
 //
 // Array and slice values encode as JSON arrays, except that
 // []byte encodes as a base64-encoded string, and a nil slice
-// encodes as the null JSON value.
+// encodes as the nil JSON value.
 //
 // Struct values encode as JSON objects.
 // Each exported struct field becomes a member of the object, using the
@@ -142,10 +142,10 @@ import (
 //   - integer keys are converted to strings
 //
 // Pointer values encode as the value pointed to.
-// A nil pointer encodes as the null JSON value.
+// A nil pointer encodes as the nil JSON value.
 //
 // Interface values encode as the value contained in the interface.
-// A nil interface value encodes as the null JSON value.
+// A nil interface value encodes as the nil JSON value.
 //
 // Channel, complex, and function values cannot be encoded in JSON.
 // Attempting to encode such a value causes Marshal to return
@@ -363,7 +363,8 @@ type encOpts struct {
 	// quoted causes primitive fields to be encoded inside JSON strings.
 	quoted bool
 	// escapeHTML causes '<', '>', and '&' to be escaped in JSON strings.
-	escapeHTML bool
+	escapeHTML   bool
+	fieldPkgPath string
 }
 
 type encoderFunc func(e *encodeState, v reflect.Value, opts encOpts)
@@ -462,17 +463,17 @@ func newTypeEncoder(t reflect.Type, allowAddr bool) encoderFunc {
 }
 
 func invalidValueEncoder(e *encodeState, v reflect.Value, _ encOpts) {
-	e.WriteString("null")
+	e.WriteString("nil")
 }
 
 func marshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	m, ok := v.Interface().(Marshaler)
 	if !ok {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	b, err := m.MarshalJSON()
@@ -488,7 +489,7 @@ func marshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 func addrMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	va := v.Addr()
 	if va.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	m := va.Interface().(Marshaler)
@@ -504,12 +505,12 @@ func addrMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 
 func textMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	m, ok := v.Interface().(encoding.TextMarshaler)
 	if !ok {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	b, err := m.MarshalText()
@@ -522,7 +523,7 @@ func textMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 func addrTextMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	va := v.Addr()
 	if va.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	m := va.Interface().(encoding.TextMarshaler)
@@ -535,7 +536,7 @@ func addrTextMarshalerEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 
 func boolEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	if opts.quoted {
-		e.WriteByte('"')
+		//e.WriteByte('"')
 	}
 	if v.Bool() {
 		e.WriteString("true")
@@ -543,18 +544,18 @@ func boolEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 		e.WriteString("false")
 	}
 	if opts.quoted {
-		e.WriteByte('"')
+		//e.WriteByte('"')
 	}
 }
 
 func intEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	b := strconv.AppendInt(e.scratch[:0], v.Int(), 10)
 	if opts.quoted {
-		e.WriteByte('"')
+		//e.WriteByte('"')
 	}
 	e.Write(b)
 	if opts.quoted {
-		e.WriteByte('"')
+		//e.WriteByte('"')
 	}
 }
 
@@ -709,7 +710,7 @@ func isValidNumber(s string) bool {
 
 func interfaceEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	e.reflectValue(v.Elem(), opts)
@@ -751,12 +752,14 @@ FieldLoop:
 		}
 		e.WriteByte(next)
 		next = ','
-		if opts.escapeHTML {
-			e.WriteString(f.nameEscHTML)
-		} else {
-			e.WriteString(f.nameNonEsc)
-		}
+		//if opts.escapeHTML {
+		//	e.WriteString(f.nameEscHTML)
+		//} else {
+		//	e.WriteString(f.name)
+		//}
+		e.WriteString(f.name + ":")
 		opts.quoted = f.quoted
+		opts.fieldPkgPath = f.pkgPath
 		f.encoder(e, fv, opts)
 	}
 	if next == '{' {
@@ -777,7 +780,7 @@ type mapEncoder struct {
 
 func (me mapEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
@@ -832,7 +835,7 @@ func newMapEncoder(t reflect.Type) encoderFunc {
 
 func encodeByteSlice(e *encodeState, v reflect.Value, _ encOpts) {
 	if v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	s := v.Bytes()
@@ -867,7 +870,7 @@ type sliceEncoder struct {
 
 func (se sliceEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
@@ -902,11 +905,22 @@ func newSliceEncoder(t reflect.Type) encoderFunc {
 }
 
 type arrayEncoder struct {
-	elemEnc encoderFunc
+	elemEnc  encoderFunc
+	elemType reflect.Type
+}
+
+func parseTypeName(t reflect.Type, opts encOpts) string {
+	if t.Kind() == reflect.Ptr {
+		return "*" + t.Elem().Name()
+	}
+	return t.Name()
+	//return opts.fieldPkgPath
 }
 
 func (ae arrayEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
-	e.WriteByte('[')
+	e.WriteString("[]") // TODO (wei.li): int32/int64
+	e.WriteString(parseTypeName(ae.elemType, opts))
+	e.WriteByte('{')
 	n := v.Len()
 	for i := 0; i < n; i++ {
 		if i > 0 {
@@ -914,11 +928,11 @@ func (ae arrayEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 		}
 		ae.elemEnc(e, v.Index(i), opts)
 	}
-	e.WriteByte(']')
+	e.WriteByte('}')
 }
 
 func newArrayEncoder(t reflect.Type) encoderFunc {
-	enc := arrayEncoder{typeEncoder(t.Elem())}
+	enc := arrayEncoder{typeEncoder(t.Elem()), t.Elem()}
 	return enc.encode
 }
 
@@ -928,7 +942,7 @@ type ptrEncoder struct {
 
 func (pe ptrEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	if v.IsNil() {
-		e.WriteString("null")
+		e.WriteString("nil")
 		return
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
@@ -1186,6 +1200,7 @@ type field struct {
 	quoted    bool
 
 	encoder encoderFunc
+	pkgPath string
 }
 
 // byIndex sorts field by index sequence.
@@ -1299,6 +1314,7 @@ func typeFields(t reflect.Type) structFields {
 						typ:       ft,
 						omitEmpty: opts.Contains("omitempty"),
 						quoted:    quoted,
+						pkgPath:   sf.PkgPath,
 					}
 					field.nameBytes = []byte(field.name)
 					field.equalFold = foldFunc(field.nameBytes)
@@ -1325,7 +1341,7 @@ func typeFields(t reflect.Type) structFields {
 				// Record new anonymous struct to explore in next round.
 				nextCount[ft]++
 				if nextCount[ft] == 1 {
-					next = append(next, field{name: ft.Name(), index: index, typ: ft})
+					next = append(next, field{name: ft.Name(), index: index, typ: ft, pkgPath: sf.PkgPath})
 				}
 			}
 		}
