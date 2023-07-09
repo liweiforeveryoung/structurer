@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"code.byted.org/overpass/data_life_trade_order_search/kitex_gen/data/life/trade_order_search"
+	"encoding/json"
 	"fmt"
 	"structurer/st"
 )
@@ -20,23 +22,45 @@ type SB struct {
 
 func main() {
 	obj := trade_order_search.GetOrderResponse{}
-	_ = st.Unmarshal([]byte(rawJson), &obj)
+	_ = json.Unmarshal([]byte(rawJson), &obj)
 	//
-	sb := SB{
-		//World: "world",
-		//SA: &SA{
-		//	Hello: "hello",
-		//},
-		//SliceInt:    []int{1, 2, 3},
-		//SliceString: []string{"s1", "s2"},
-		SliceStruct: []*SB{
-			{
-				World: "ss world",
-			},
-		},
-	}
-	bs, _ := st.Marshal(sb)
-	fmt.Println(string(bs))
+	//obj := SB{
+	//	//World: "world",
+	//	//SA: &SA{
+	//	//	Hello: "hello",
+	//	//},
+	//	//SliceInt:    []int{1, 2, 3},
+	//	//SliceString: []string{"s1", "s2"},
+	//	SliceStruct: []*SB{
+	//		{
+	//			World: "ss world",
+	//		},
+	//	},
+	//}
+	pathMap, bs, _ := st.Marshal(obj)
+	fmt.Println("=======   pathMap:   ", GenerateImportPkgPath(pathMap))
+	fmt.Println("=======   bs1:   ", string(bs))
+
+	bs2, _ := json.Marshal(obj)
+	fmt.Println("=======   bs2:   ", string(bs2))
 }
 
-var rawJson = "{\n    \"OrderId\": \"1003379872014106040\",\n    \"OrderDetailAccess\": {\n        \"GetDetail\": true,\n        \"GetSnapShot\": true,\n        \"GetOrderItem\": true,\n        \"GetOrderFee\": true,\n        \"GetExchangeProductSnap\": true,\n        \"GetOrderService\": true\n    },\n    \"NeedFakeItem\": false,\n    \"MasterQuery\": false,\n    \"Downgrade2MasterQuery\": false,\n    \"Base\": {\n        \"LogID\": \"\",\n        \"Caller\": \"\",\n        \"Addr\": \"\",\n        \"Client\": \"\",\n        \"TrafficEnv\": {\n            \"Open\": false,\n            \"Env\": \"\"\n        },\n        \"Extra\": {\n            \"\": \"\",\n            \"env\": \"prod\"\n        }\n    }\n}"
+func GenerateImportPkgPath(pathMap map[string]string) string {
+	buf := bytes.NewBuffer(nil)
+	buf.WriteString("import (\n")
+	for shortcut, completePath := range pathMap {
+		buf.WriteString(shortcut)
+		buf.WriteString(" \"")
+		buf.WriteString(completePath)
+		buf.WriteByte('"')
+		buf.WriteString("\n")
+	}
+	buf.WriteString(")")
+	return buf.String()
+}
+
+func XXX() trade_order_search.GetOrderResponse {
+	return trade_order_search.GetOrderResponse{}
+}
+
+var rawJson = "{     \"BaseResp\": {\n        \"StatusCode\": 0,\n        \"StatusMessage\": \"\"\n    }\n}"

@@ -2,7 +2,10 @@ module structurer
 
 go 1.19
 
-require code.byted.org/overpass/data_life_trade_order_search v0.0.0-20230630105216-afc8c72af992
+require (
+	code.byted.org/lang/gg v0.14.0
+	code.byted.org/overpass/data_life_trade_order_search v0.0.0-20230630105216-afc8c72af992
+)
 
 require (
 	code.byted.org/kite/kitex v1.11.6 // indirect

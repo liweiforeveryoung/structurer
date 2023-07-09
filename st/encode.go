@@ -12,6 +12,7 @@ package st
 
 import (
 	"bytes"
+	"code.byted.org/lang/gg/gslice"
 	"encoding"
 	"encoding/base64"
 	"fmt"
@@ -154,35 +155,40 @@ import (
 // JSON cannot represent cyclic data structures and Marshal does not
 // handle them. Passing cyclic structures to Marshal will result in
 // an error.
-func Marshal(v any) ([]byte, error) {
+func Marshal(v any) (map[string]string, []byte, error) {
 	e := newEncodeState()
 
 	err := e.marshal(v, encOpts{escapeHTML: true})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	buf := append([]byte(nil), e.Bytes()...)
 
+	m := make(map[string]string)
+	AllPkgPath.Range(func(key, value any) bool {
+		m[key.(string)] = value.(string)
+		return true
+	})
 	encodeStatePool.Put(e)
 
-	return buf, nil
+	return m, buf, nil
 }
 
 // MarshalIndent is like Marshal but applies Indent to format the output.
 // Each JSON element in the output will begin on a new line beginning with prefix
 // followed by one or more copies of indent according to the indentation nesting.
-func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
-	b, err := Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	err = Indent(&buf, b, prefix, indent)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
+//func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+//	b, err := Marshal(v)
+//	if err != nil {
+//		return nil, err
+//	}
+//	var buf bytes.Buffer
+//	err = Indent(&buf, b, prefix, indent)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return buf.Bytes(), nil
+//}
 
 // HTMLEscape appends to dst the JSON-encoded src with <, >, &, U+2028 and U+2029
 // characters inside string literals changed to \u003c, \u003e, \u0026, \u2028, \u2029
@@ -363,8 +369,8 @@ type encOpts struct {
 	// quoted causes primitive fields to be encoded inside JSON strings.
 	quoted bool
 	// escapeHTML causes '<', '>', and '&' to be escaped in JSON strings.
-	escapeHTML   bool
-	fieldPkgPath string
+	escapeHTML bool
+	isPointer  bool
 }
 
 type encoderFunc func(e *encodeState, v reflect.Value, opts encOpts)
@@ -730,6 +736,11 @@ type structFields struct {
 }
 
 func (se structEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
+	if opts.isPointer {
+		e.WriteByte('&')
+	}
+	typeName := parseTypeName(v.Type(), opts)
+	e.WriteString(typeName)
 	next := byte('{')
 FieldLoop:
 	for i := range se.fields.list {
@@ -759,7 +770,6 @@ FieldLoop:
 		//}
 		e.WriteString(f.name + ":")
 		opts.quoted = f.quoted
-		opts.fieldPkgPath = f.pkgPath
 		f.encoder(e, fv, opts)
 	}
 	if next == '{' {
@@ -909,11 +919,25 @@ type arrayEncoder struct {
 	elemType reflect.Type
 }
 
+var AllPkgPath sync.Map
+
+func CompactAndRecordPkgPath(path string) string {
+	fragments := strings.Split(path, "/")
+	init := fragments[:len(fragments)-1]
+	last := gslice.Last(fragments).Value()
+	initJoinFirst := gslice.Fold(init, func(prev string, rec string) string {
+		return prev + string(rec[0])
+	}, "")
+	res := fmt.Sprintf("%s_%s", initJoinFirst, last)
+	AllPkgPath.Store(res, path)
+	return res
+}
+
 func parseTypeName(t reflect.Type, opts encOpts) string {
 	if t.Kind() == reflect.Ptr {
-		return "*" + t.Elem().Name()
+		return fmt.Sprintf("&%s.%s", CompactAndRecordPkgPath(t.Elem().PkgPath()), t.Elem().Name())
 	}
-	return t.Name()
+	return fmt.Sprintf("%s.%s", CompactAndRecordPkgPath(t.PkgPath()), t.Name())
 	//return opts.fieldPkgPath
 }
 
@@ -960,7 +984,10 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 }
 
 func newPtrEncoder(t reflect.Type) encoderFunc {
-	enc := ptrEncoder{typeEncoder(t.Elem())}
+	enc := ptrEncoder{func(e *encodeState, v reflect.Value, opts encOpts) {
+		opts.isPointer = true
+		typeEncoder(t.Elem())(e, v, opts)
+	}}
 	return enc.encode
 }
 
@@ -1200,7 +1227,6 @@ type field struct {
 	quoted    bool
 
 	encoder encoderFunc
-	pkgPath string
 }
 
 // byIndex sorts field by index sequence.
@@ -1314,7 +1340,6 @@ func typeFields(t reflect.Type) structFields {
 						typ:       ft,
 						omitEmpty: opts.Contains("omitempty"),
 						quoted:    quoted,
-						pkgPath:   sf.PkgPath,
 					}
 					field.nameBytes = []byte(field.name)
 					field.equalFold = foldFunc(field.nameBytes)
@@ -1341,7 +1366,7 @@ func typeFields(t reflect.Type) structFields {
 				// Record new anonymous struct to explore in next round.
 				nextCount[ft]++
 				if nextCount[ft] == 1 {
-					next = append(next, field{name: ft.Name(), index: index, typ: ft, pkgPath: sf.PkgPath})
+					next = append(next, field{name: ft.Name(), index: index, typ: ft})
 				}
 			}
 		}
