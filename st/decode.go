@@ -5,7 +5,7 @@
 // Represents JSON data structure using native Go types: booleans, floats,
 // strings, arrays, and maps.
 
-package json
+package st
 
 import (
 	"encoding"
@@ -72,7 +72,7 @@ import (
 // use. If the map is nil, Unmarshal allocates a new map. Otherwise Unmarshal
 // reuses the existing map, keeping existing entries. Unmarshal then stores
 // key-value pairs from the JSON object into the map. The map's key type must
-// either be any string type, an integer, implement json.Unmarshaler, or
+// either be any string type, an integer, implement st.Unmarshaler, or
 // implement encoding.TextUnmarshaler.
 //
 // If a JSON value is not appropriate for a given target type,

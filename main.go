@@ -3,7 +3,7 @@ package main
 import (
 	"code.byted.org/overpass/data_life_trade_order_search/kitex_gen/data/life/trade_order_search"
 	"fmt"
-	"structurer/json"
+	"structurer/st"
 )
 
 type SA struct {
@@ -20,7 +20,7 @@ type SB struct {
 
 func main() {
 	obj := trade_order_search.GetOrderResponse{}
-	_ = json.Unmarshal([]byte(rawJson), &obj)
+	_ = st.Unmarshal([]byte(rawJson), &obj)
 	//
 	sb := SB{
 		//World: "world",
@@ -35,7 +35,7 @@ func main() {
 			},
 		},
 	}
-	bs, _ := json.Marshal(sb)
+	bs, _ := st.Marshal(sb)
 	fmt.Println(string(bs))
 }
 
