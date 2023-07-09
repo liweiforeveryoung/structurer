@@ -559,7 +559,10 @@ func intEncoder(e *encodeState, v reflect.Value, opts encOpts) {
 	if opts.quoted {
 		//e.WriteByte('"')
 	}
+	e.WriteString(v.Type().Name())
+	e.WriteByte('(')
 	e.Write(b)
+	e.WriteByte(')')
 	if opts.quoted {
 		//e.WriteByte('"')
 	}
@@ -736,10 +739,7 @@ type structFields struct {
 }
 
 func (se structEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
-	if opts.isPointer {
-		e.WriteByte('&')
-	}
-	typeName := parseTypeName(v.Type(), opts)
+	typeName := parseTypeName(v.Type())
 	e.WriteString(typeName)
 	next := byte('{')
 FieldLoop:
@@ -922,6 +922,9 @@ type arrayEncoder struct {
 var AllPkgPath sync.Map
 
 func CompactAndRecordPkgPath(path string) string {
+	if path == "" {
+		return ""
+	}
 	fragments := strings.Split(path, "/")
 	init := fragments[:len(fragments)-1]
 	last := gslice.Last(fragments).Value()
@@ -930,20 +933,20 @@ func CompactAndRecordPkgPath(path string) string {
 	}, "")
 	res := fmt.Sprintf("%s_%s", initJoinFirst, last)
 	AllPkgPath.Store(res, path)
-	return res
+	return res + "."
 }
 
-func parseTypeName(t reflect.Type, opts encOpts) string {
+func parseTypeName(t reflect.Type) string {
 	if t.Kind() == reflect.Ptr {
-		return fmt.Sprintf("&%s.%s", CompactAndRecordPkgPath(t.Elem().PkgPath()), t.Elem().Name())
+		return fmt.Sprintf("*%s%s", CompactAndRecordPkgPath(t.Elem().PkgPath()), t.Elem().Name())
 	}
-	return fmt.Sprintf("%s.%s", CompactAndRecordPkgPath(t.PkgPath()), t.Name())
+	return fmt.Sprintf("%s%s", CompactAndRecordPkgPath(t.PkgPath()), t.Name())
 	//return opts.fieldPkgPath
 }
 
 func (ae arrayEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	e.WriteString("[]") // TODO (wei.li): int32/int64
-	e.WriteString(parseTypeName(ae.elemType, opts))
+	e.WriteString(parseTypeName(ae.elemType))
 	e.WriteByte('{')
 	n := v.Len()
 	for i := 0; i < n; i++ {
@@ -985,7 +988,8 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 
 func newPtrEncoder(t reflect.Type) encoderFunc {
 	enc := ptrEncoder{func(e *encodeState, v reflect.Value, opts encOpts) {
-		opts.isPointer = true
+		e.WriteString("gptr.Of(")
+		defer e.WriteString(")")
 		typeEncoder(t.Elem())(e, v, opts)
 	}}
 	return enc.encode
@@ -1300,10 +1304,11 @@ func typeFields(t reflect.Type) structFields {
 				if tag == "-" {
 					continue
 				}
-				name, opts := parseTag(tag)
-				if !isValidTag(name) {
-					name = ""
-				}
+				//name, opts := parseTag(tag)
+				//if !isValidTag(name) {
+				//	name = ""
+				//}
+				name := sf.Name
 				index := make([]int, len(f.index)+1)
 				copy(index, f.index)
 				index[len(f.index)] = i
@@ -1316,16 +1321,16 @@ func typeFields(t reflect.Type) structFields {
 
 				// Only strings, floats, integers, and booleans can be quoted.
 				quoted := false
-				if opts.Contains("string") {
-					switch ft.Kind() {
-					case reflect.Bool,
-						reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-						reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-						reflect.Float32, reflect.Float64,
-						reflect.String:
-						quoted = true
-					}
-				}
+				//if opts.Contains("string") {
+				//	switch ft.Kind() {
+				//	case reflect.Bool,
+				//		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				//		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+				//		reflect.Float32, reflect.Float64,
+				//		reflect.String:
+				//		quoted = true
+				//	}
+				//}
 
 				// Record found field and index sequence.
 				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
@@ -1334,12 +1339,12 @@ func typeFields(t reflect.Type) structFields {
 						name = sf.Name
 					}
 					field := field{
-						name:      name,
-						tag:       tagged,
-						index:     index,
-						typ:       ft,
-						omitEmpty: opts.Contains("omitempty"),
-						quoted:    quoted,
+						name:  name,
+						tag:   tagged,
+						index: index,
+						typ:   ft,
+						//omitEmpty: opts.Contains("omitempty"),
+						quoted: quoted,
 					}
 					field.nameBytes = []byte(field.name)
 					field.equalFold = foldFunc(field.nameBytes)
